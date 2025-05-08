@@ -1,0 +1,101 @@
+from kivy.app import App
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.button import Button
+from kivy.uix.label import Label
+from kivy.uix.textinput import TextInput
+
+import os
+from cryptography.fernet import Fernet
+
+# Generate key or load existing key
+key_file = "secret.key"
+if not os.path.exists(key_file):
+    with open(key_file, 'wb') as f:
+        f.write(Fernet.generate_key())
+with open(key_file, 'rb') as f:
+    key = f.read()
+fernet = Fernet(key)
+
+class FileHider(BoxLayout):
+    def __init__(self, **kwargs):
+        super().__init__(orientation='vertical', **kwargs)
+        self.file_input = TextInput(hint_text='Enter file path', size_hint_y=None, height=40)
+        self.add_widget(self.file_input)
+
+        self.output = Label(size_hint_y=None, height=80)
+        self.add_widget(self.output)
+
+        actions = [
+            ('Hide File', self.hide_file),
+            ('Unhide File', self.unhide_file),
+            ('List Hidden Files', self.list_hidden),
+            ('Encrypt File', self.encrypt_file),
+            ('Decrypt File', self.decrypt_file)
+        ]
+        for name, action in actions:
+            btn = Button(text=name, size_hint_y=None, height=40)
+            btn.bind(on_press=action)
+            self.add_widget(btn)
+
+    def hide_file(self, instance):
+        path = self.file_input.text
+        if os.path.exists(path):
+            hidden_path = os.path.join(os.path.dirname(path), '.' + os.path.basename(path))
+            os.rename(path, hidden_path)
+            self.output.text = f'File hidden: {hidden_path}'
+        else:
+            self.output.text = 'File not found.'
+
+    def unhide_file(self, instance):
+        path = self.file_input.text
+        if os.path.exists(path):
+            if os.path.basename(path).startswith('.'):
+                unhidden_path = os.path.join(os.path.dirname(path), os.path.basename(path)[1:])
+                os.rename(path, unhidden_path)
+                self.output.text = f'File unhidden: {unhidden_path}'
+            else:
+                self.output.text = 'File is not hidden.'
+        else:
+            self.output.text = 'File not found.'
+
+    def list_hidden(self, instance):
+        folder = os.path.dirname(self.file_input.text)
+        if os.path.isdir(folder):
+            hidden = [f for f in os.listdir(folder) if f.startswith('.')]
+            self.output.text = 'Hidden files:\n' + '\n'.join(hidden)
+        else:
+            self.output.text = 'Directory not found.'
+
+    def encrypt_file(self, instance):
+        path = self.file_input.text
+        if os.path.exists(path):
+            with open(path, 'rb') as file:
+                data = file.read()
+            encrypted = fernet.encrypt(data)
+            with open(path, 'wb') as file:
+                file.write(encrypted)
+            self.output.text = 'File encrypted.'
+        else:
+            self.output.text = 'File not found.'
+
+    def decrypt_file(self, instance):
+        path = self.file_input.text
+        if os.path.exists(path):
+            with open(path, 'rb') as file:
+                encrypted = file.read()
+            try:
+                decrypted = fernet.decrypt(encrypted)
+                with open(path, 'wb') as file:
+                    file.write(decrypted)
+                self.output.text = 'File decrypted.'
+            except Exception as e:
+                self.output.text = 'Decryption failed.'
+        else:
+            self.output.text = 'File not found.'
+
+class FileHiderApp(App):
+    def build(self):
+        return FileHider()
+
+if __name__ == '__main__':
+    FileHiderApp().run()
